@@ -341,7 +341,10 @@ class NineAnimeProvider : MainAPI() {
             Pair(newSname, datalinkId)
         }
         aas.apmap { (sName, sId) ->
-            if (sName == "vidstream") {
+            val nName = if (sName == null) "mycloud" else sName
+            val vids = nName == "vidstream"
+            val mclo = nName == "mycloud"
+            if (vids || mclo) {
                 val sae = consumetVrf(sId)
                 val encID = sae.url
                 val videncrr = app.get("$mainUrl/ajax/server/$sId?${sae.vrfQuery}=${encode(encID)}").parsed<Links>()
@@ -351,20 +354,22 @@ class NineAnimeProvider : MainAPI() {
                     val regex = Regex("(.+?/)e(?:mbed)?/([a-zA-Z0-9]+)")
                     val group = regex.find(asss)!!.groupValues
                     val vizId = group[2]
-                    val ssae = app.get("https://api.consumet.org/anime/9anime/helper?query=$vizId&action=vizcloud").text
+                    val action = if (vids) "vizcloud" else "mcloud"
+                    val ssae = app.get("https://api.consumet.org/anime/9anime/helper?query=$vizId&action=$action").text
                     val reg2 = Regex("((https|http).*list.*(m3u8|.mp4))")
                     val m3u8 = reg2.find(ssae)?.destructured?.component1() ?: ""
 
-                    val ref = "https://vidstream.pro/"
+                    val ref = if (vids) "https://vidstream.pro/" else "https://mcloud.to/"
+                    val name = if (vids) "Vidstream" else "MyCloud"
                     generateM3u8(
-                        "Vidstream",
+                        name,
                         m3u8.replace("#.mp4",""),
                         ref
                     ).apmap {
                         callback(
                             ExtractorLink(
-                                "Vidstream",
-                                "Vidstream",
+                                name,
+                                name,
                                 it.url,
                                 ref,
                                 getQualityFromName(it.quality.toString()),
@@ -374,7 +379,7 @@ class NineAnimeProvider : MainAPI() {
                     }
                 }
             }
-            if (!sName.isNullOrEmpty() && sName != "vidstream") {
+            if (!sName.isNullOrEmpty() && !vids || !mclo) {
                 val bbbs = decUrlConsu(sId)
                 loadExtractor(bbbs, subtitleCallback, callback)
             }
