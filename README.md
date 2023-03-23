@@ -1,5 +1,4 @@
 # `Storm`
-Spanish and English providers
 
 ## Attribution
 
