@@ -11,7 +11,7 @@ import kotlinx.coroutines.delay
 
 
 class NineAnimeProvider : MainAPI() {
-    override var mainUrl = "https://9anime.id"
+    override var mainUrl = "https://9animehq.to"
     override var name = "9Anime"
     override val hasMainPage = true
     override val hasChromecastSupport = true
@@ -129,7 +129,7 @@ class NineAnimeProvider : MainAPI() {
            )
        } */
     override suspend fun load(url: String): LoadResponse {
-        val validUrl = url.replace("https://9anime.to", mainUrl)
+        val validUrl = url.replace("https://9anime.pl", mainUrl)
         val doc = app.get(validUrl).document
 
         val meta = doc.selectFirst("#w-info") ?: throw ErrorLoadingException("Could not find info")
