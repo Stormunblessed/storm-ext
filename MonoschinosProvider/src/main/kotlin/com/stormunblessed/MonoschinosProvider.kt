@@ -51,9 +51,7 @@ class MonoschinosProvider : MainAPI() {
                 app.get(mainUrl, timeout = 120).document.select(".col-6").map {
                     val title = it.selectFirst("p.animetitles")?.text() ?: it.selectFirst(".animetitles")?.text() ?: ""
                     val poster =
-                        it.selectFirst("img.animemainimg")?.attr("data-src")
-                            ?: it.selectFirst("img.lozad.animeimghv")?.attr("data-src")
-                            ?: ""
+                        it.selectFirst("img")?.attr("data-src") ?: ""
 
                     val epRegex = Regex("episodio-(\\d+)")
                     val url = it.selectFirst("a")?.attr("href")!!.replace("ver/", "anime/")
@@ -144,6 +142,7 @@ class MonoschinosProvider : MainAPI() {
             val encodedurl = it.select("p").attr("data-player")
             val urlDecoded = base64Decode(encodedurl)
             val url = (urlDecoded).replace("https://monoschinos2.com/reproductor?url=", "")
+                .replace("https://sblona.com","https://watchsb.com")
             loadExtractor(url, mainUrl, subtitleCallback, callback)
         }
         return true
