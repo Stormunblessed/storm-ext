@@ -11,7 +11,7 @@ import kotlinx.coroutines.delay
 
 
 class NineAnimeProvider : MainAPI() {
-    override var mainUrl = "https://9anime.id"
+    override var mainUrl = "https://9anime.gs"
     override var name = "9Anime"
     override val hasMainPage = true
     override val hasChromecastSupport = true
