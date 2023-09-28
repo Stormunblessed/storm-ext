@@ -31,7 +31,7 @@ fun Project.cloudstream(configuration: CloudstreamExtension.() -> Unit) =
 fun Project.android(configuration: BaseExtension.() -> Unit) =
     extensions.getByName<BaseExtension>("android").configuration()
 
-@Suppress("ExpiredTargetSdkVersion") subprojects {
+subprojects {
     apply(plugin = "com.android.library")
     apply(plugin = "kotlin-android")
     apply(plugin = "com.lagradost.cloudstream3.gradle")
@@ -78,7 +78,7 @@ fun Project.android(configuration: BaseExtension.() -> Unit) =
         // but you dont need to include any of them if you dont need them
         // https://github.com/recloudstream/cloudstream/blob/master/app/build.gradle
         implementation(kotlin("stdlib")) // adds standard kotlin features, like listOf, mapOf etc
-        implementation("com.github.Blatzar:NiceHttp:0.4.2") // http library
+        implementation("com.github.Blatzar:NiceHttp:0.3.2") // http library
         implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.13.1")
         implementation("org.jsoup:jsoup:1.13.1") // html parser
         implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4") // delay()
