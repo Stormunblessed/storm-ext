@@ -7,7 +7,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.lagradost.cloudstream3.AcraApplication.Companion.context
-import com.stormunblessed.NineAnimeProviderPlugin.Companion.postFunction
+import com.stormunblessed.AniwaveProviderPlugin.Companion.postFunction
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
