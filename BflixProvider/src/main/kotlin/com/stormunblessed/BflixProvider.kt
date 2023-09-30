@@ -8,6 +8,9 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.M3u8Helper
 import com.lagradost.cloudstream3.utils.getQualityFromName
 import com.lagradost.cloudstream3.utils.loadExtractor
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 import org.jsoup.Jsoup
 
 open class BflixProvider : MainAPI() {
@@ -16,13 +19,14 @@ open class BflixProvider : MainAPI() {
     override val hasMainPage = true
     override val hasChromecastSupport = true
     override val hasDownloadSupport = true
-    override val hasQuickSearch = true
+    override val hasQuickSearch = false
     override val supportedTypes = setOf(
         TvType.Movie,
         TvType.TvSeries,
     )
 
     companion object {
+        private val mediaType = "application/json; charset=utf-8".toMediaType()
         private const val bfliKey =
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
         private const val mainKey = "DZmuZuXqa9O0z3b7"
@@ -136,22 +140,22 @@ open class BflixProvider : MainAPI() {
         val items = ArrayList<HomePageList>()
         val soup = app.get("$mainUrl/home").document
         val testa = listOf(
-            Pair("Movies", "div.tab-content[data-name=movies] div.filmlist div.item"),
-            Pair("Shows", "div.tab-content[data-name=shows] div.filmlist div.item"),
-            Pair("Trending", "div.tab-content[data-name=trending] div.filmlist div.item"),
+            Pair("Movies", "div.tab-content[data-name=movies] div.film div.film-inner"),
+            Pair("Shows", "div.tab-content[data-name=shows] div.film div.film-inner"),
+            Pair("Trending", "div.tab-content[data-name=trending] div.film div.film-inner"),
             Pair(
                 "Latest Movies",
-                "div.container section.bl:contains(Latest Movies) div.filmlist div.item"
+                "div.zone:contains(Latest Movies) div.film div.film-inner"
             ),
             Pair(
-                "Latest TV-Series",
-                "div.container section.bl:contains(Latest TV-Series) div.filmlist div.item"
+                "Latest TV Shows",
+                "div.zone:contains(Latest TV Shows) div.film div.film-inner"
             ),
         )
 
         testa.apmap {(name, element) ->
             val test = soup.select(element).map {
-                val title = it.selectFirst("h3 a")!!.text()
+                val title = it.selectFirst("a.film-name")!!.text()
                 val link = fixUrl(it.selectFirst("a")!!.attr("href"))
                 val qualityInfo = it.selectFirst("div.quality")!!.text()
                 val quality = getQualityFromString(qualityInfo)
@@ -160,7 +164,7 @@ open class BflixProvider : MainAPI() {
                     link,
                     this.name,
                     if (link.contains("/movie/")) TvType.Movie else TvType.TvSeries,
-                    it.selectFirst("a.poster img")!!.attr("src"),
+                    it.selectFirst("a.film-poster img")!!.attr("data-src"),
                     null,
                     null,
                     quality = quality
@@ -178,272 +182,315 @@ open class BflixProvider : MainAPI() {
         @JsonProperty("html") val html: String? = null,
         //@JsonProperty("linkMore") val linkMore: String? = null
     )
-    override suspend fun quickSearch(query: String): List<SearchResponse>? {
-        val encodedquery = encodeVrf(query, mainKey)
-        val url = "$mainUrl/ajax/film/search?vrf=$encodedquery&keyword=$query"
-        val response = app.get(url).parsedSafe<QuickSearchResult>()
-        val elementa = if (mainUrl.contains("fmovies")) "a.item" else "a"
-        val document = Jsoup.parse(response?.html ?: return null)
-        return document.select(elementa).mapNotNull {element ->
-            val link = fixUrl(element?.attr("href") ?: return@mapNotNull null)
-            val title = (element.selectFirst("div.title") ?: element.selectFirst("div.name"))?.text() ?: return@mapNotNull null
-            val img = (element.selectFirst("div.poster img") ?: element.selectFirst("img"))?.attr("src") ?: return@mapNotNull null
-            newTvSeriesSearchResponse(title, link){
-                this.posterUrl = img
-            }
+/*
+override suspend fun quickSearch(query: String): List<SearchResponse>? {
+    val encodedquery = encodeVrf(query, mainKey)
+    val url = "$mainUrl/ajax/film/search?vrf=$encodedquery&keyword=$query"
+    val response = app.get(url).parsedSafe<QuickSearchResult>()
+    val elementa = if (mainUrl.contains("fmovies")) "a.item" else "a"
+    val document = Jsoup.parse(response?.html ?: return null)
+    return document.select(elementa).mapNotNull {element ->
+        val link = fixUrl(element?.attr("href") ?: return@mapNotNull null)
+        val title = (element.selectFirst("div.title") ?: element.selectFirst("div.name"))?.text() ?: return@mapNotNull null
+        val img = (element.selectFirst("div.poster img") ?: element.selectFirst("img"))?.attr("src") ?: return@mapNotNull null
+        newTvSeriesSearchResponse(title, link){
+            this.posterUrl = img
         }
     }
-    override suspend fun search(query: String): List<SearchResponse>? {
-        val encodedquery = encodeVrf(query, mainKey)
-        val url = "$mainUrl/search?keyword=$query&vrf=$encodedquery"
-        val html = app.get(url).text
-        val document = Jsoup.parse(html)
+} */
+override suspend fun search(query: String): List<SearchResponse>? {
+    //val encodedquery = encodeVrf(query, mainKey)
+    val url = "$mainUrl/filter?keyword=$query"
+    val document = app.get(url).document
+    return document.select("div.film div.film-inner").map {
+        val title = it.selectFirst("a.film-name")!!.text()
+        val href = fixUrl(it.selectFirst("a")!!.attr("href"))
+        val image = it.selectFirst("a.film-poster img")!!.attr("data-src")
+        val isMovie = href.contains("/movie/")
+        val qualityInfo = it.selectFirst("div.quality")!!.text()
+        val quality = getQualityFromString(qualityInfo)
 
-        return document.select(".filmlist div.item").map {
-            val title = it.selectFirst("h3 a")!!.text()
-            val href = fixUrl(it.selectFirst("a")!!.attr("href"))
-            val image = it.selectFirst("a.poster img")!!.attr("src")
-            val isMovie = href.contains("/movie/")
-            val qualityInfo = it.selectFirst("div.quality")!!.text()
-            val quality = getQualityFromString(qualityInfo)
-
-            if (isMovie) {
-                MovieSearchResponse(
-                    title,
-                    href,
-                    this.name,
-                    TvType.Movie,
-                    image,
-                    null,
-                    quality = quality
-                )
-            } else {
-                TvSeriesSearchResponse(
-                    title,
-                    href,
-                    this.name,
-                    TvType.TvSeries,
-                    image,
-                    null,
-                    null,
-                    quality = quality
-                )
-            }
-        }
-    }
-
-    data class Response(
-        @JsonProperty("html") val html: String
-    )
-
-    override suspend fun load(url: String): LoadResponse? {
-        val soup = app.get(url).document
-        val movieid = soup.selectFirst("div#watch")!!.attr("data-id")
-        val movieidencoded = encodeVrf(movieid, mainKey)
-        val title = soup.selectFirst("div.info h1")!!.text()
-        val description = soup.selectFirst(".info .desc")?.text()?.trim()
-        val poster: String? = try {
-            soup.selectFirst("img.poster")!!.attr("src")
-        } catch (e: Exception) {
-            soup.selectFirst(".info .poster img")!!.attr("src")
-        }
-
-
-        val backimginfo = (soup.selectFirst(".play")?: soup.selectFirst(".backdrop"))?.attr("style")
-        val backimgRegx = Regex("(http|https).*jpg")
-        val backposter = backimgRegx.find(backimginfo.toString())?.value ?: poster
-        val tags = soup.select("div.info .meta div:contains(Genre) a").map { it.text() }
-        val vrfUrl = "$mainUrl/ajax/film/servers?id=$movieid&vrf=$movieidencoded"
-        val episodes = Jsoup.parse(
-            app.get(
-                vrfUrl
-            ).parsed<Response>().html
-        ).select("div.episode").map {
-            val a = it.selectFirst("a")
-            val href = fixUrl(a!!.attr("href"))
-            val extraData = a.attr("data-kname").let { str ->
-                str.split("-").mapNotNull { subStr -> subStr.toIntOrNull() }
-            }
-            val isValid = extraData.size == 2
-            val episode = if (isValid) extraData.getOrNull(1) else null
-            val season = if (isValid) extraData.getOrNull(0) else null
-            val secondhref = if (episode == null || season == null) "$url/1-full" else "$url/$season-$episode"
-            val eptitle = it.selectFirst(".episode a span.name")!!.text()
-            val secondtitle = it.selectFirst(".episode a span")!!.text()
-                .replace(Regex("(Episode (\\d+):|Episode (\\d+)-|Episode (\\d+))"), "")
-            Episode(
-                secondhref,
-                secondtitle + eptitle,
-                season,
-                episode,
+        if (isMovie) {
+            MovieSearchResponse(
+                title,
+                href,
+                this.name,
+                TvType.Movie,
+                image,
+                null,
+                quality = quality
+            )
+        } else {
+            TvSeriesSearchResponse(
+                title,
+                href,
+                this.name,
+                TvType.TvSeries,
+                image,
+                null,
+                null,
+                quality = quality
             )
         }
-        val tvType =
-            if (url.contains("/movie/") && episodes.size == 1) TvType.Movie else TvType.TvSeries
-        val recommendations =
-            soup.select("div.bl-2 section.bl div.content div.filmlist div.item")
-                .mapNotNull { element ->
-                    val recTitle = element.select("h3 a").text() ?: return@mapNotNull null
-                    val image = element.select("a.poster img").attr("src")
-                    val recUrl = fixUrl(element.select("a").attr("href"))
-                    MovieSearchResponse(
-                        recTitle,
-                        recUrl,
-                        this.name,
-                        if (recUrl.contains("/movie/")) TvType.Movie else TvType.TvSeries,
-                        image,
-                        year = null
-                    )
-                }
-        val rating = soup.selectFirst(".info span.imdb")?.text()?.toRatingInt()
-        val durationdoc = (soup.selectFirst("div.meta > span:nth-child(4)") ?: soup.selectFirst("div.meta > span:nth-child(3)"))?.text() ?: ""
-        val bflix = mainUrl == "https://bflix.ru"
-        val year = if (bflix) soup.selectFirst("div.meta > span:nth-child(3)")?.text()
-        else soup.selectFirst("div.meta div span[itemprop=dateCreated]")?.text()?.substringBefore("-")
-        return when (tvType) {
-            TvType.TvSeries -> {
-                newTvSeriesLoadResponse(title, url, tvType, episodes) {
-                    this.posterUrl = poster
-                    this.backgroundPosterUrl = backposter
-                    this.plot = description
-                    this.rating = rating
-                    this.recommendations = recommendations
-                    this.tags = tags
-                    this.year = year?.toIntOrNull()
-                    addDuration(durationdoc)
-                }
-            }
-            TvType.Movie -> {
-                newMovieLoadResponse(title, url, tvType, url) {
-                    this.posterUrl = poster
-                    this.backgroundPosterUrl = backposter
-                    this.plot = description
-                    this.rating = rating
-                    this.recommendations = recommendations
-                    this.tags = tags
-                    this.year = year?.toIntOrNull()
-                    addDuration(durationdoc)
-                }
-            }
-            else -> null
-        }
+    }
+}
+
+data class Response(
+    @JsonProperty("result") val result: String
+)
+
+    data class VrfResponse (
+
+        @JsonProperty("url" ) val url : String
+
+    )
+    private suspend fun  vrfHelper(action:String, query: String):String {
+        val parse = app.get("https://9anime.eltik.net/$action?query=$query&apikey=lagrapps").parsed<VrfResponse>()
+        return parse.url
+    }
+
+override suspend fun load(url: String): LoadResponse? {
+    val soup = app.get(url).document
+    val movieid = soup.selectFirst("div.film-rating")!!.attr("data-id")
+    // val movieidencoded = encodeVrf(movieid, mainKey)
+    val movieidencoded = vrfHelper("fmovies-vrf", movieid)
+
+    val title = soup.selectFirst(".film-title")!!.text()
+    val description = soup.selectFirst(".film-desc")?.text()?.trim()
+    val poster: String? = try {
+        soup.selectFirst("#film-detail .film-poster img")!!.attr("src")
+    } catch (e: Exception) {
+        soup.selectFirst(".info .poster img")!!.attr("src")
     }
 
 
-    data class Subtitles(
-        @JsonProperty("file") val file: String,
-        @JsonProperty("label") val label: String,
-        @JsonProperty("kind") val kind: String
+    val backimginfo = (soup.selectFirst(".film-background") ?: soup.selectFirst(".player-bg"))?.attr("style")
+    val backimgRegx = Regex("(http|https).*jpg")
+    val backposter = backimgRegx.find(backimginfo.toString())?.value ?: poster
+    val tags = soup.select(".film-info .film-meta div:contains(Genre) a").map { it.text() }
+
+    //$mainUrl/ajax/episode/list/$movieid?vrf=$movieidencoded
+    val vrfUrl = "$mainUrl/ajax/episode/list/$movieid?vrf=$movieidencoded"
+    val episodes = ArrayList<Episode>()
+    val asse = Jsoup.parse(
+        app.get(
+            vrfUrl
+        ).parsed<Response>().result
+    )
+    var dataMovie = ""
+    asse.select("ul.episodes").map {main ->
+         val seasonNum = main.attr("data-season")
+         main.select("li a").map { sec ->
+             val epdata = sec.attr("data-slug")
+             val epID = sec.attr("data-id")
+             val seasonPair = Triple(seasonNum, epdata, epID)
+             val epTitle = sec.select("a").text().replace(Regex("(Episode (\\d+):|Episode (\\d+)-|Episode (\\d+))"), "")
+             episodes.add(
+                 newEpisode(seasonPair.third){
+                     this.name = epTitle
+                     this.season = seasonPair.first.toString().toIntOrNull()
+                     this.episode = seasonPair.second.toString().toIntOrNull()
+                 }
+             )
+         }
+     }
+
+    val tvType =
+        if (url.contains("/movie/") && episodes.size == 1) TvType.Movie else TvType.TvSeries
+
+
+    if (tvType == TvType.Movie) {
+        dataMovie = asse.select("ul.episodes li a").attr("data-id")
+    }
+
+
+    val rating = soup.selectFirst("div.score.live-label span b[itemprop=ratingValue]")?.text()?.toRatingInt()
+    val durationdoc = (soup.selectFirst("div.meta > span:nth-child(4)") ?: soup.selectFirst("div.meta > span:nth-child(5)"))?.text() ?: ""
+    val bflix = mainUrl == "https://bflix.to"
+   // val year = if (bflix) soup.selectFirst("div.meta > span:nth-child(3)")?.text()
+   // else soup.selectFirst("div.meta div span[itemprop=dateCreated]")?.text()?.substringBefore("-")
+    return when (tvType) {
+        TvType.TvSeries -> {
+            newTvSeriesLoadResponse(title, url, tvType, episodes) {
+                this.posterUrl = poster
+                this.backgroundPosterUrl = backposter
+                this.plot = description
+                this.rating = rating
+                //this.recommendations = recommendations
+                this.tags = tags
+                //this.year = year?.toIntOrNull()
+                addDuration(durationdoc)
+            }
+        }
+        TvType.Movie -> {
+            newMovieLoadResponse(title, url, tvType, dataMovie) {
+                this.posterUrl = poster
+                this.backgroundPosterUrl = backposter
+                this.plot = description
+                this.rating = rating
+                //this.recommendations = recommendations
+                this.tags = tags
+                //this.year = year?.toIntOrNull()
+                addDuration(durationdoc)
+            }
+        }
+        else -> null
+    }
+}
+
+
+data class Subtitles(
+    @JsonProperty("file") val file: String,
+    @JsonProperty("label") val label: String,
+    @JsonProperty("kind") val kind: String
+)
+
+    data class Result(
+        @JsonProperty("url")
+        val url: String? = null,
+        @JsonProperty("rawURL")
+        val rawURL: String? = null
     )
 
     data class Links(
-        @JsonProperty("url") val url: String
+        @JsonProperty("result")
+        val result: Result? = null
     )
 
-    data class Servers(
-        @JsonProperty("28") val mcloud: String?,
-        @JsonProperty("35") val mp4upload: String?,
-        @JsonProperty("40") val streamtape: String?,
-        @JsonProperty("41") val vidstream: String?,
-        @JsonProperty("45") val filemoon: String?
-    )
+data class Servers(
+    @JsonProperty("28") val mcloud: String?,
+    @JsonProperty("35") val mp4upload: String?,
+    @JsonProperty("40") val streamtape: String?,
+    @JsonProperty("41") val vidplay: String?,
+    @JsonProperty("45") val filemoon: String?
+)
 
-    class ServersID(elements: Map<String, String>) : HashMap<String, String>(elements)
+class ServersID(elements: Map<String, String>) : HashMap<String, String>(elements)
 
 
-
-    private suspend fun getStream(
-        streamLink: String,
-        name: String,
-        referer: String,
-        callback: (ExtractorLink) -> Unit
-    )  {
-        return M3u8Helper.generateM3u8(
-            name,
-            streamLink,
-            referer
-        ).forEach(callback)
+    private fun serverName(serverID: String?): String? {
+        val sss =
+            when (serverID) {
+                "28" -> "mcloud"
+                "41" -> "vidplay"
+                "45" -> "filemoon"
+                "40" -> "streamtape"
+                "35" -> "mp4upload"
+                else -> null
+            }
+        return sss
     }
+private suspend fun getStream(
+    streamLink: String,
+    name: String,
+    referer: String,
+    callback: (ExtractorLink) -> Unit
+)  {
+    return M3u8Helper.generateM3u8(
+        name,
+        streamLink,
+        referer
+    ).forEach(callback)
+}
 
+    data class BflixMediaInfo (
+        @JsonProperty("result" ) val result : BflixResult? = BflixResult()
+    )
+
+
+    data class BflixResult (
+
+        @JsonProperty("sources" ) var sources : ArrayList<BflixTracks> = arrayListOf(),
+        @JsonProperty("tracks"  ) var tracks  : ArrayList<BflixTracks>  = arrayListOf()
+
+    )
+    data class BflixTracks (
+        @JsonProperty("file"    ) var file    : String?  = null,
+        @JsonProperty("label"   ) var label   : String?  = null,
+    )
+
+
+    data class BflixSubtitles (
+        @JsonProperty("file"    ) var file    : String?  = null,
+        @JsonProperty("label"   ) var label   : String?  = null,
+        @JsonProperty("kind"    ) var kind    : String?  = null,
+        @JsonProperty("default" ) var default : Boolean? = null
+    )
+
+class TestingSubs : ArrayList<TestingSubsItem>()
+
+data class TestingSubsItem(
+    @JsonProperty("file"    ) var file    : String?  = null,
+    @JsonProperty("label"   ) var label   : String?  = null,
+    @JsonProperty("kind"    ) var kind    : String?  = null,
+    @JsonProperty("default" ) var default : Boolean? = null
+)
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val soup = app.get(data).document
+        val dataClean = data.replace("$mainUrl/","")
+        val dataEncoded = encode(vrfHelper("fmovies-vrf",dataClean))
+        //https://bflix.to/ajax/server/list/331685?vrf=QA%2BZPhjFWBg%3B
+        val serversUrl = "$mainUrl/ajax/server/list/$dataClean?vrf=$dataEncoded"
+        val serversPair = Jsoup.parse(
+            app.get(serversUrl).parsed<Response>().result
+        ).select(".film-server").map {
+            val serverId = it.attr("data-id")
+            val datalinkId = it.attr("data-link-id")
+            val newSname = serverName(serverId)
+            Pair(newSname, datalinkId)
+        }
 
-        val movieid = encode(soup.selectFirst("div#watch")?.attr("data-id") ?: return false)
-        val movieidencoded = encodeVrf(movieid, mainKey)
-        Jsoup.parse(
-            parseJson<Response>(
-                app.get(
-                    "$mainUrl/ajax/film/servers?id=$movieid&vrf=$movieidencoded"
-                ).text
-            ).html
-        )
-            .select("html body #episodes").map {
-                val cleandata = data.replace(mainUrl, "")
-                val a = it.select("a").map {
-                    it.attr("data-kname")
-                }
-                val tvType =
-                    if (data.contains("movie/") && a.size == 1) TvType.Movie else TvType.TvSeries
-                val servers = if (tvType == TvType.Movie) it.select(".episode a").attr("data-ep")
-                else
-                    it.select(".episode a[href=$cleandata]").attr("data-ep")
-                        ?: it.select(".episode a[href=${cleandata.replace("/1-full", "")}]")
-                            .attr("data-ep")
-                val jsonservers = parseJson<Servers?>(servers) ?: return@map
-                listOfNotNull(
-                    jsonservers.vidstream,
-                    jsonservers.streamtape,
-                    jsonservers.filemoon,
-                ).map {
-                    val epserver = app.get("$mainUrl/ajax/episode/info?id=$it").text
-                    if (epserver.contains("url")) {
-                        val serversJson = parseJson<Links>(epserver)
-                        val links = decode(decodeVrf(serversJson.url, mainKey))
-                        if (links.contains("vidstream")) {
-                            val regex = Regex("(.+?/)e(?:mbed)?/([a-zA-Z0-9]+)")
-                            val group = regex.find(links)!!.groupValues
-                            val vizId = group[2]
-                            val ssae = app.get("https://api.consumet.org/anime/9anime/helper?query=$vizId&action=vizcloud").text
-                            val reg2 = Regex("((https|http).*list.*(m3u8|.mp4))")
-                            val m3u8 = reg2.find(ssae)?.destructured?.component1() ?: ""
-                            val ref = "https://vidstream.pro/"
+        serversPair.apmap {(sName, sId) ->
+            val encId = vrfHelper("fmovies-vrf",sId)
+            val urlEnc = app.get("$mainUrl/ajax/server/$sId?vrf=$encId").parsed<Links>().result?.url
+
+            if (urlEnc != null) {
+                val vids = sName == "vidplay"
+                val mclo = sName == "mcloud"
+                if (vids || mclo) {
+                    val decUrl = vrfHelper("fmovies-decrypt", urlEnc)
+                    val futoken = app.get("https://vidstream.pro/futoken").text
+                    val comps = decUrl.split("/");
+                    val vizId = comps[comps.size - 1];
+                    //val jsonBody = "{\"query\":\"$vizId\",\"futoken\":\"$futoken\"}"
+                    val map = mapOf("query" to vizId, "futoken" to futoken)
+                    val jsonBody = JSONObject(map).toString()
+                    val action = if (vids) "rawVizcloud" else "rawMcloud"
+                    val mediaUrl = app.post("https://9anime.eltik.net/$action?apikey=lagrapps", requestBody = jsonBody.toRequestBody(mediaType)).parsed<Result>().rawURL
+                    val ref = if (vids) "https://vidstream.pro/" else "https://mcloud.to/"
+                    if (mediaUrl != null) {
+                        val resultJson = app.get(mediaUrl, headers = mapOf("Referer" to ref)).parsed<BflixMediaInfo>()
+                        val name = if (vids) "Vidplay" else "MyCloud"
+                        resultJson.result?.sources?.apmap {
+                            val source = it.file ?: ""
                             M3u8Helper.generateM3u8(
-                                "Vidstream",
-                                m3u8.replace("#.mp4", ""),
+                                name,
+                                source,
                                 ref
-                            ).apmap {
-                                callback(
-                                    ExtractorLink(
-                                        "Vidstream",
-                                        "Vidstream",
-                                        it.url,
-                                        ref,
-                                        getQualityFromName(it.quality.toString()),
-                                        true
-                                    )
-                                )
-                            }
-                        } else {
-                            loadExtractor(links, subtitleCallback, callback)
+                            ).forEach(callback)
                         }
                     }
                 }
-                //Apparently any server works, I haven't found any diference
-                val sublink =
-                    app.get("$mainUrl/ajax/episode/subtitles/${jsonservers.mcloud}").text
-                val jsonsub = parseJson<List<Subtitles>>(sublink)
-                jsonsub.forEach { subtitle ->
-                    subtitleCallback(
-                        SubtitleFile(subtitle.label, subtitle.file)
-                    )
+                if (!sName.isNullOrEmpty() && !vids || !mclo) {
+                    val decUrl = vrfHelper("fmovies-decrypt", urlEnc)
+                    loadExtractor(decUrl, subtitleCallback, callback)
                 }
             }
-
+            val subsUrl = app.get("$mainUrl/ajax/episode/subtitles/$dataClean").parsed<TestingSubs>()
+            subsUrl.apmap {
+                val subtitle = it.file ?: ""
+                val lang = it.label ?: ""
+                subtitleCallback.invoke(
+                    SubtitleFile(lang, subtitle)
+                )
+            }
+        }
         return true
     }
+
+
 }
