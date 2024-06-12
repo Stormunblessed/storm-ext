@@ -224,13 +224,33 @@ class JKAnimeProvider : MainAPI() {
         return linkRegex.findAll(text).map { it.value.trim().removeSurrounding("\"").replace(Regex("(iframe(.class|.src=\")|=\"player_conte\".*src=\"|\".scrolling|\".width)"),"") }.toList()
     }
 
+
+
+    data class ServersEncoded (
+            @JsonProperty("remote" ) val remote : String,
+    )
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+
         app.get(data).document.select("script").apmap { script ->
+
+            if (script.data().contains(Regex("slug|remote"))) {
+                val serversRegex = Regex("\\[\\{.*?\"remote\".*?\"\\}\\]")
+                val servers = serversRegex.findAll(script.data()).map { it.value }.toList().first()
+                val serJson = parseJson<ArrayList<ServersEncoded>>(servers)
+                serJson.apmap {
+                    val encodedurl = it.remote
+                    val urlDecoded = base64Decode(encodedurl)
+                    loadExtractor(urlDecoded, mainUrl, subtitleCallback, callback)
+                }
+
+            }
+
+
             if (script.data().contains("var video = []")) {
                 val videos = script.data().replace("\\/", "/")
                 fetchjkanime(videos).map { it }.toList()
@@ -353,7 +373,9 @@ class JKAnimeProvider : MainAPI() {
                     }
                 }
             }
+
         }
+
         return true
     }
 }
