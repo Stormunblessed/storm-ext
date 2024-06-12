@@ -143,116 +143,12 @@ class CinecalidadProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+         app.get(data).document.select(".linklist ul li").apmap {
+             val url = it.select("li").attr("data-option")
+             loadExtractor(url, mainUrl, subtitleCallback, callback)
+         }
 
-        val datam = app.get(data)
-        val doc = datam.document
-        val datatext = datam.text
 
-        doc.select(".dooplay_player_option").apmap {
-            val url = it.attr("data-option").replace("youtube","")
-            if (url.startsWith("https://cinestart.net")) {
-                val extractor = Cinestart()
-                extractor.getSafeUrl(url, null, subtitleCallback, callback)
-            } else {
-                loadExtractor(url, mainUrl, subtitleCallback, callback)
-            }
-            if (url.startsWith("https://cinecalidad.lol")) {
-                val cineurlregex =
-                    Regex("(https:\\/\\/cinecalidad\\.lol\\/play\\/\\?h=[a-zA-Z0-9]{0,8}[a-zA-Z0-9_-]+)")
-                cineurlregex.findAll(url).map {
-                    it.value.replace("/play/", "/play/r.php")
-                }.toList().apmap {
-                    app.get(
-                        it,
-                        headers = mapOf(
-                            "Host" to "cinecalidad.lol",
-                            "User-Agent" to USER_AGENT,
-                            "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                            "Accept-Language" to "en-US,en;q=0.5",
-                            "DNT" to "1",
-                            "Connection" to "keep-alive",
-                            "Referer" to data,
-                            "Upgrade-Insecure-Requests" to "1",
-                            "Sec-Fetch-Dest" to "iframe",
-                            "Sec-Fetch-Mode" to "navigate",
-                            "Sec-Fetch-Site" to "same-origin",
-                            "Sec-Fetch-User" to "?1",
-                        ),
-                        allowRedirects = false
-                    ).okhttpResponse.headers.values("location").apmap { extractedurl ->
-                        if (extractedurl.contains("cinestart")) {
-                            loadExtractor(extractedurl, mainUrl, subtitleCallback, callback)
-                        }
-                    }
-                }
-            }
-        }
-        if (datatext.contains("en castellano")) app.get("$data?ref=es").document.select(".dooplay_player_option")
-            .apmap {
-                val url = it.attr("data-option")
-                if (url.startsWith("https://cinestart.net")) {
-                    val extractor = Cinestart()
-                    extractor.getSafeUrl(url, null, subtitleCallback, callback)
-                } else {
-                    loadExtractor(url, mainUrl, subtitleCallback, callback)
-                }
-
-                if (url.startsWith("https://cinecalidad.lol")) {
-                    val cineurlregex =
-                        Regex("(https:\\/\\/cinecalidad\\.lol\\/play\\/\\?h=[a-zA-Z0-9]{0,8}[a-zA-Z0-9_-]+)")
-                    cineurlregex.findAll(url).map {
-                        it.value.replace("/play/", "/play/r.php")
-                    }.toList().apmap {
-                        app.get(
-                            it,
-                            headers = mapOf(
-                                "Host" to "cinecalidad.lol",
-                                "User-Agent" to USER_AGENT,
-                                "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                                "Accept-Language" to "en-US,en;q=0.5",
-                                "DNT" to "1",
-                                "Connection" to "keep-alive",
-                                "Referer" to data,
-                                "Upgrade-Insecure-Requests" to "1",
-                                "Sec-Fetch-Dest" to "iframe",
-                                "Sec-Fetch-Mode" to "navigate",
-                                "Sec-Fetch-Site" to "same-origin",
-                                "Sec-Fetch-User" to "?1",
-                            ),
-                            allowRedirects = false
-                        ).okhttpResponse.headers.values("location").apmap { extractedurl ->
-                            if (extractedurl.contains("cinestart")) {
-                                loadExtractor(extractedurl, mainUrl, subtitleCallback, callback)
-                            }
-                        }
-                    }
-                }
-            }
-        if (datatext.contains("Subtítulo LAT") || datatext.contains("Forzados LAT")) {
-            doc.select("#panel_descarga.pane a").apmap {
-                val link =
-                    if (data.contains("serie") || data.contains("episodio")) "${data}${it.attr("href")}"
-                    else it.attr("href")
-                val docsub = app.get(link)
-                val linksub = docsub.document
-                val validsub = docsub.text
-                if (validsub.contains("Subtítulo") || validsub.contains("Forzados")) {
-                    val langregex = Regex("(Subtítulo.*\$|Forzados.*\$)")
-                    val langdoc = linksub.selectFirst("div.titulo h3")!!.text()
-                    val reallang = langregex.find(langdoc)?.destructured?.component1()
-                    linksub.select("a.link").apmap {
-                        val sublink =
-                            if (data.contains("serie") || data.contains("episodio")) "${data}${
-                                it.attr("href")
-                            }"
-                            else it.attr("href")
-                        subtitleCallback(
-                            SubtitleFile(reallang!!, sublink)
-                        )
-                    }
-                }
-            }
-        }
         return true
     }
 }
