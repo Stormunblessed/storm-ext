@@ -275,13 +275,19 @@ class DoramasFlixProvider:MainAPI() {
                 loadExtractor(link!!, data, subtitleCallback, callback)
             }
         } else {
-            val episodeslinkRequestbody = "{\"operationName\":\"detailEpisodeLinks\",\"variables\":{\"episode_slug\":\"$data\"},\"query\":\"query detailEpisodeLinks(\$episode_slug: String!) {\\n  detailEpisode(filter: {slug: \$episode_slug, type_serie: \\\"dorama\\\"}) {\\n    links_online\\n   }\\n}\\n\"}"
+            val episodeslinkRequestbody = "{\"operationName\":\"GetEpisodeLinks\",\"variables\":{\"episode_slug\":\"$data\"},\"query\":\"query GetEpisodeLinks(\$episode_slug: String!) {\\n  detailEpisode(filter: {slug: \$episode_slug, type_serie: \\\"dorama\\\"}) {\\n    links_online\\n   }\\n}\\n\"}"
             val request = app.post(doraflixapi, requestBody = episodeslinkRequestbody.toRequestBody(mediaType)).parsedSafe<MainDoramas>()
+            //val test = app.post(doraflixapi, requestBody = episodeslinkRequestbody.toRequestBody(mediaType)).text
+            //println("TESTEO $test")
             request?.data?.detailEpisode?.linksOnline?.map {
-                val link = it.link
+                val link = it.link?.replace("https://swdyu.com","https://streamwish.to")?.replace("https://uqload.to","https://uqload.co")
+                //println("LINK $link")
                 loadExtractor(link!!, data, subtitleCallback, callback)
             }
         }
+
+
+
         return true
     }
 }

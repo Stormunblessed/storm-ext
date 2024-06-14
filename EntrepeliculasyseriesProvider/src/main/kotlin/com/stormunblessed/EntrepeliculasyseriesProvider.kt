@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.movieproviders
 
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
 
@@ -20,7 +21,7 @@ class EntrepeliculasyseriesProvider : MainAPI() {
     override val mainPage = mainPageOf(
         Pair("$mainUrl/series/page/", "Series"),
         Pair("$mainUrl/peliculas/page/", "Peliculas"),
-        Pair("$mainUrl/anime/page/", "Animes"),
+        Pair("$mainUrl/genero/animacion/page/", "Animes"),
     )
 
     override suspend fun getMainPage(
@@ -30,15 +31,15 @@ class EntrepeliculasyseriesProvider : MainAPI() {
         val url = request.data + page
 
         val soup = app.get(url).document
-        val home = soup.select("ul.list-movie li").map {
-            val title = it.selectFirst("a.link-title h2")!!.text()
+        val home = soup.select("ul.post-lst article").map {
+            val title = it.selectFirst(".title")!!.text()
             val link = it.selectFirst("a")!!.attr("href")
             TvSeriesSearchResponse(
                 title,
                 link,
                 this.name,
                 if (link.contains("/pelicula/")) TvType.Movie else TvType.TvSeries,
-                it.selectFirst("a.poster img")!!.attr("src"),
+                it.selectFirst("img")!!.attr("src"),
                 null,
                 null,
             )
@@ -49,12 +50,36 @@ class EntrepeliculasyseriesProvider : MainAPI() {
 
     override suspend fun search(query: String): List<SearchResponse> {
         val url = "$mainUrl/?s=${query}"
-        val document = app.get(url).document
+        val document = app.get(url,
+                headers = mapOf(
+                        "Host" to "entrepeliculasyseries.nz",
+                        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; rv:126.0) Gecko/20100101 Firefox/126.0",
+                        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                        "Accept-Language" to "en-US,en;q=0.5",
+                        "DNT" to "1",
+                        "Connection" to "keep-alive",
+                        "Cookie" to "cf_clearance=FB0f2bIIB.3Bm8NRqzg9EZ2.He88HXKboI2tOwG85P8-1718334330-1.0.1.1-k.Tlg68YmgqSkTp3UDXBrcNuN1l1YnZw3a0VjRswwjRTx3pZgVrGsdaJRLcmuGemFeSrQOjGVMfCvpSwCsDQOg",
+                        "Upgrade-Insecure-Requests" to "1",
+                        "Sec-Fetch-Dest" to "document",
+                        "Sec-Fetch-Mode" to "navigate",
+                        "Sec-Fetch-Site" to "same-origin",
+                        "Sec-Fetch-User" to "?1",
+                        "TE" to "trailers",
+                        "Alt-Used" to "entrepeliculasyseries.nz",
+                        "Priority" to "u=4",
+                        "Pragma" to "no-cache",
+                        "Cache-Control" to "no-cache",
 
-        return document.select("li.xxx.TPostMv").map {
-            val title = it.selectFirst("h2.Title")!!.text()
+                        )
+                ).document
+        val killer = CloudflareKiller()
+        //val kk = killer.getCookieHeaders(url).toMap()
+        //val aa = killer.savedCookies
+
+        return document.select("ul.post-lst article").map {
+            val title = it.selectFirst(".title")!!.text()
             val href = it.selectFirst("a")!!.attr("href")
-            val image = it.selectFirst("img.lazy")!!.attr("data-src")
+            val image = it.selectFirst("img")!!.attr("src")
             val isMovie = href.contains("/pelicula/")
 
             if (isMovie) {

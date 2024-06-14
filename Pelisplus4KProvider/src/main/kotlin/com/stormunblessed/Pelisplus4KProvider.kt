@@ -135,11 +135,17 @@ class Pelisplus4KProvider :MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         val doc = app.get(data).document
-        doc.select(".bg-tabs li").apmap {
-            val link = it.attr("data-server").replace("https://owodeuwu.xyz", "https://fembed.com")
-                .replace("https://sblanh.com","https://watchsb.com").replace(Regex("([a-zA-Z0-9]{0,8}[a-zA-Z0-9_-]+)=https:\\/\\/ww3.pelisplus.to.*"),"")
-            loadExtractor(link, data, subtitleCallback, callback)
+        doc.select("div ul.subselect li").apmap {
+            val encodedOne = it.attr("data-server").toByteArray()
+            val encodedTwo = base64Encode(encodedOne)
+            val linkRegex = Regex("window\\.location\\.href\\s*=\\s*'(.*)'")
+            val text = app.get("$mainUrl/player/$encodedTwo").text
+            val link = linkRegex.find(text)?.destructured?.component1()
+            if (link != null) {
+                loadExtractor(link, mainUrl, subtitleCallback, callback)
+            }
         }
         return true
     }
+
 }
