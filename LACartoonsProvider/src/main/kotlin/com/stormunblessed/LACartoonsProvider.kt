@@ -76,7 +76,7 @@ class LACartoonsProvider:MainAPI() {
     ): Boolean {
         val res = app.get(data).document
         res.select(".serie-video-informacion iframe").map {
-            val link = it.attr("src")?.replace("https://short.ink/","")
+            val link = it.attr("src")?.replace("https://short.ink/","https://abysscdn.com/?v=")
             loadExtractor(link!!, data, subtitleCallback, callback)
         }
         return true

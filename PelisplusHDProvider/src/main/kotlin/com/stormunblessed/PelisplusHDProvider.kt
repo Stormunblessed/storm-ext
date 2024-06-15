@@ -1,7 +1,10 @@
 package com.lagradost.cloudstream3.movieproviders
 
+import android.webkit.URLUtil
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.getQualityFromName
+import com.lagradost.cloudstream3.utils.loadExtractor
 import com.lagradost.cloudstream3.utils.loadExtractor
 import org.jsoup.nodes.Element
 
@@ -164,29 +167,65 @@ class PelisplusHDProvider:MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        app.get(data).document.select("div.player > script").map { script ->
-            fetchUrls(script.data()
-                .replace("https://api.mycdn.moe/furl.php?id=","https://www.fembed.com/v/")
-                .replace("https://api.mycdn.moe/sblink.php?id=","https://streamsb.net/e/"))
+        app.get(data).document.select("div.player").map { script ->
+            fetchUrls(
+                script.data()
+                    .replace("https://api.mycdn.moe/furl.php?id=", "https://www.fembed.com/v/")
+                    .replace("https://api.mycdn.moe/sblink.php?id=", "https://streamsb.net/e/")
+            )
                 .apmap { link ->
-                    if (link.contains("https://api.mycdn.moe/video/") || link.contains("https://api.mycdn.moe/embed.php?customid")) {
-                        val doc = app.get(link).document
-                        doc.select("div.ODDIV li").apmap {
-                            val linkencoded = it.attr("data-r")
-                            val linkdecoded = base64Decode(linkencoded)
-                                .replace(Regex("https://owodeuwu.xyz|https://sypl.xyz"),"https://embedsito.com")
-                                .replace(Regex(".poster.*"),"")
-                            val secondlink = it.attr("onclick").substringAfter("go_to_player('").substringBefore("',")
-                            loadExtractor(linkdecoded, link,subtitleCallback, callback)
-                            val restwo = app.get("https://api.mycdn.moe/player/?id=$secondlink", allowRedirects = false).document
-                            val thirdlink = restwo.selectFirst("body > iframe")?.attr("src")
-                                ?.replace(Regex("https://owodeuwu.xyz|https://sypl.xyz"),"https://embedsito.com")
-                                ?.replace(Regex(".poster.*"),"")
-                            loadExtractor(thirdlink!!, link, subtitleCallback, callback)
+                    val regex = """(go_to_player|go_to_playerVast)\('(.*?)'""".toRegex()
+                    regex.findAll(app.get(link).document.html()).toList().apmap {
+                        val current = it?.groupValues?.get(2) ?: ""
+                        var link: String? = null
+                        if (URLUtil.isValidUrl(current)) {
+                            link = fixUrl(current)
+                        } else {
+                            try {
+                                link =
+                                    base64Decode(
+                                        it?.groupValues?.get(1) ?: ""
+                                    )
+                            } catch (e: Throwable) {
+                            }
+                        }
 
+                        if (!link.isNullOrBlank()) {
+                            if (link.contains("https://api.mycdn.moe/video/") || link.contains(
+                                    "https://api.mycdn.moe/embed.php?customid"
+                                )
+                            ) {
+                                val doc = app.get(link).document
+                                doc.select("div.ODDIV li").apmap {
+                                    val linkencoded = it.attr("data-r")
+                                    val linkdecoded = base64Decode(linkencoded)
+                                        .replace(
+                                            Regex("https://owodeuwu.xyz|https://sypl.xyz"),
+                                            "https://embedsito.com"
+                                        )
+                                        .replace(Regex(".poster.*"), "")
+                                    val secondlink =
+                                        it.attr("onclick").substringAfter("go_to_player('")
+                                            .substringBefore("',")
+                                    loadExtractor(linkdecoded, link, subtitleCallback, callback)
+                                    val restwo = app.get(
+                                        "https://api.mycdn.moe/player/?id=$secondlink",
+                                        allowRedirects = false
+                                    ).document
+                                    val thirdlink = restwo.selectFirst("body > iframe")?.attr("src")
+                                        ?.replace(
+                                            Regex("https://owodeuwu.xyz|https://sypl.xyz"),
+                                            "https://embedsito.com"
+                                        )
+                                        ?.replace(Regex(".poster.*"), "")
+                                    loadExtractor(thirdlink!!, link, subtitleCallback, callback)
+
+                                }
+                            } else {
+                                loadExtractor(link, data, subtitleCallback, callback)
+                            }
                         }
                     }
-                    loadExtractor(link, data, subtitleCallback, callback)
                 }
         }
         return true
