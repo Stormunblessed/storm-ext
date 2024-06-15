@@ -221,7 +221,8 @@ class SeriesflixProvider : MainAPI() {
         app.get(data).document.select("li div.Button.sgty").apmap {
             val encodedlink = it.attr("data-url")
             val decodelink = base64Decode(encodedlink)
-
+            println("DECODE $decodelink")
+            loadExtractor(decodelink, data, subtitleCallback, callback)
         }
 
         return true

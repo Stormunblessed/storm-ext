@@ -142,13 +142,13 @@ class AnimeflvnetProvider : MainAPI() {
                     val epNum = it.removePrefix("[").substringBefore(",")
                     // val epthumbid = it.removePrefix("[").substringAfter(",").substringBefore("]")
                     val animeid = doc.selectFirst("div.Strs.RateIt")?.attr("data-id")
-                    val epthumb = "https://cdn.animeflv.net/screenshots/$animeid/$epNum/th_3.jpg"
+                    //val epthumb = "https://cdn.animeflv.net/screenshots/$animeid/$epNum/th_3.jpg"
                     val link = url.replace("/anime/", "/ver/") + "-$epNum"
                     episodes.add(
                         Episode(
                             link,
                             null,
-                            posterUrl = epthumb,
+                            //posterUrl = epthumb,
                             episode = epNum.toIntOrNull()
                         )
                     )
@@ -164,6 +164,16 @@ class AnimeflvnetProvider : MainAPI() {
         }
     }
 
+    data class MainServers(
+            @JsonProperty("SUB")
+            val sub: List<Sub>,
+    )
+
+    data class Sub(
+            val code: String,
+    )
+
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
@@ -174,12 +184,12 @@ class AnimeflvnetProvider : MainAPI() {
             if (script.data().contains("var videos = {") || script.data()
                     .contains("var anime_id =") || script.data().contains("server")
             ) {
-                val videos = script.data().replace("\\/", "/")
-                fetchUrls(videos).map {
-                    it.replace("https://embedsb.com/e/", "https://watchsb.com/e/")
-                        .replace("https://ok.ru", "http://ok.ru")
-                }.apmap {
-                    loadExtractor(it, data, subtitleCallback, callback)
+                val serversRegex = Regex("var videos = (\\{\"SUB\":\\[\\{.*?\\}\\]\\});")
+                val serversplain = serversRegex.find(script.data())?.destructured?.component1() ?: ""
+                val json = parseJson<MainServers>(serversplain)
+                json.sub.apmap {
+                    val code = it.code
+                    loadExtractor(code, data, subtitleCallback, callback)
                 }
             }
         }

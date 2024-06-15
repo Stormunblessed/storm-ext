@@ -44,7 +44,7 @@ class Pelisplus4KProvider :MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val url = "$mainUrl/api/search?search=$query"
+        val url = "$mainUrl/api/search/$query"
         val doc = app.get(url).document
         return doc.select("article.item").map {
             val title = it.selectFirst("a h2")?.text()
