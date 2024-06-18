@@ -2,14 +2,13 @@ package com.stormunblessed
 
 import android.util.Base64
 import com.lagradost.cloudstream3.*
-import com.lagradost.cloudstream3.LoadResponse.Companion.addDuration
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.JsUnpacker
 import com.lagradost.cloudstream3.utils.getQualityFromName
-import com.lagradost.cloudstream3.utils.loadExtractor
 import java.net.URL
 
 class CablevisionHdProvider : MainAPI() {
+
     override var mainUrl = "https://www.cablevisionhd.com"
     override var name = "CablevisionHd"
     override var lang = "es"
@@ -18,10 +17,29 @@ class CablevisionHdProvider : MainAPI() {
     override val hasMainPage = true
     override val hasChromecastSupport = true
     override val hasDownloadSupport = true
+
     override val supportedTypes = setOf(
             TvType.Live,
     )
-    val nowAllowed = setOf("Únete al chat", "Donar con Paypal", "Lizard Premium", "18+")
+
+    private fun decodeBase64UntilUnchanged(encodedString: String): String {
+        var decodedString = encodedString
+        var previousDecodedString = ""
+        while (decodedString != previousDecodedString) {
+            previousDecodedString = decodedString
+            decodedString = try {
+                val decodedBytes = Base64.decode(decodedString, Base64.DEFAULT)
+                String(decodedBytes)
+            } catch (e: IllegalArgumentException) {
+                // If decoding fails (e.g., not valid base64), break the loop
+                break
+            }
+        }
+
+        return decodedString
+    }
+
+    val nowAllowed = setOf("Únete al chat", "Donar con Paypal", "Lizard Premium")
 
     val deportesCat = setOf(
             "TUDN",
@@ -163,7 +181,7 @@ class CablevisionHdProvider : MainAPI() {
                         ?: ""
                 nowAllowed.any {
                     text.contains(it, ignoreCase = true)
-                } || text.isNullOrBlank()
+                } || text.isBlank()
             }.filter {
                 val text = it.selectFirst("div.lm-canal.lm-info-block.gray-default a h4")?.text()?.trim()
                         ?: ""
@@ -230,7 +248,7 @@ class CablevisionHdProvider : MainAPI() {
                         null,
                 )
             }
-            items.add(HomePageList(name, home))
+            items.add(HomePageList(name, home, true))
         }
 
         return HomePageResponse(items)
@@ -244,7 +262,7 @@ class CablevisionHdProvider : MainAPI() {
                     ?: ""
             nowAllowed.any {
                 text.contains(it, ignoreCase = true)
-            } || text.isNullOrBlank()
+            } || text.isBlank()
         }.filter { element ->
             element.selectFirst("div.lm-canal.lm-info-block.gray-default a h4")?.text()?.contains(query, ignoreCase = true)
                     ?: false
@@ -267,7 +285,7 @@ class CablevisionHdProvider : MainAPI() {
         }
     }
 
-    override suspend fun load(url: String): LoadResponse? {
+    override suspend fun load(url: String): LoadResponse {
         val doc = app.get(url).document
         val poster = doc.selectFirst("div.page-scroll div#page_container.page-container.bg-move-effect div.block-title div.block-title div.section.mt-2 div.card.bg-dark.text-white div.card-body img")?.attr("src")?.replace(Regex("\\/p\\/w\\d+.*\\/"), "/p/original/")
                 ?: ""
@@ -329,8 +347,8 @@ class CablevisionHdProvider : MainAPI() {
                     val regex = """MARIOCSCryptOld\("(.*?)"\)""".toRegex()
                     val match = regex.find(script.unpack() ?: "")
                     val hash = match?.groupValues?.get(1) ?: ""
-                    val extractedurl = base64Decode(base64Decode(base64Decode(base64Decode(hash))))
-                    if (!extractedurl.isNullOrBlank()) {
+                    val extractedurl = decodeBase64UntilUnchanged(hash)
+                    if (extractedurl.isNotBlank()) {
                         callback(
                                 ExtractorLink(
                                         it.text() ?: getHostUrl(extractedurl),
