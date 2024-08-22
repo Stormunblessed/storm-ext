@@ -312,7 +312,7 @@ class CablevisionHdProvider : MainAPI() {
             subtitleCallback: (SubtitleFile) -> Unit,
             callback: (ExtractorLink) -> Unit
     ): Boolean {
-        app.get(data).document.select("a.btn.btn-md").forEach {
+        app.get(data).document.select("a.btn.btn-md").map {
             val trembedlink = it.attr("href")
             if (trembedlink.contains("/stream")) {
                 val tremrequest = app.get(trembedlink, headers = mapOf(
