@@ -1,5 +1,5 @@
 // use an integer for version numbers
-version = 5
+version = 1
 
 
 cloudstream {
@@ -7,7 +7,7 @@ cloudstream {
     // All of these properties are optional, you can safely remove them
 
     //description = "Lorem Ipsum"
-    authors = listOf("Stormunblessed")
+    authors = listOf("misajimenezmx")
 
     /**
      * Status int as the following:
@@ -18,9 +18,11 @@ cloudstream {
      * */
     status = 1 // will be 3 if unspecified
     tvTypes = listOf(
-        "TvSeries",
         "Movie",
+        "TvSeries",
+        "Anime",
+        "Cartoon",
     )
 
-    iconUrl = "https://www.google.com/s2/favicons?domain=pelisplushd.nu&sz=%size%"
+    iconUrl = "https://sololatino.net/wp-content/uploads/2020/10/cropped-logo-final-192x192.png"
 }

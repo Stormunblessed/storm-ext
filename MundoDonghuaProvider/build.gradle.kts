@@ -20,6 +20,7 @@ cloudstream {
     tvTypes = listOf(
         "Anime",
         "OVA",
+        "AnimeMovie",
     )
 
     iconUrl = "https://www.google.com/s2/favicons?domain=mundodonghua.com&sz=%size%"

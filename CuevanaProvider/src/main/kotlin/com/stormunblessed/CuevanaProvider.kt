@@ -9,7 +9,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
 
 class CuevanaProvider : MainAPI() {
-    override var mainUrl = "https://cuevana3.me"
+    override var mainUrl = "https://cuevana3.ch"
     override var name = "Cuevana"
     override var lang = "es"
     override val hasMainPage = true
@@ -23,8 +23,8 @@ class CuevanaProvider : MainAPI() {
     override suspend fun getMainPage(page: Int, request : MainPageRequest): HomePageResponse {
         val items = ArrayList<HomePageList>()
         val urls = listOf(
-            Pair("$mainUrl/inicio", "Recientemente actualizadas"),
-            Pair("$mainUrl/estrenos/", "Estrenos"),
+            Pair("$mainUrl/peliculas", "Recientemente actualizadas"),
+            Pair("$mainUrl/estrenos", "Estrenos"),
         )
         items.add(
             HomePageList(
@@ -32,7 +32,7 @@ class CuevanaProvider : MainAPI() {
                 app.get("$mainUrl/serie", timeout = 120).document.select("section.home-series li")
                     .map {
                         val title = it.selectFirst("h2.Title")!!.text()
-                        val poster = it.selectFirst("img.lazy")!!.attr("data-src")
+                        val poster = it.selectFirst("img.lazy")!!.attr("data-src").replaceFirst("//", "https://")
                         val url = it.selectFirst("a")!!.attr("href")
                         TvSeriesSearchResponse(
                             title,
@@ -55,7 +55,7 @@ class CuevanaProvider : MainAPI() {
                     link,
                     this.name,
                     if (link.contains("/pelicula/")) TvType.Movie else TvType.TvSeries,
-                    it.selectFirst("img.lazy")!!.attr("data-src"),
+                    it.selectFirst("img.lazy")!!.attr("data-src").replaceFirst("//", "https://"),
                     null,
                     null,
                 )
@@ -69,13 +69,13 @@ class CuevanaProvider : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val url = "$mainUrl/?s=${query}"
+        val url = "$mainUrl/search.html?keyword=${query}"
         val document = app.get(url).document
 
         return document.select("li.xxx.TPostMv").map {
             val title = it.selectFirst("h2.Title")!!.text()
-            val href = it.selectFirst("a")!!.attr("href")
-            val image = it.selectFirst("img.lazy")!!.attr("data-src")
+            val href = it.selectFirst("a")!!.attr("href").replaceFirst("/", "$mainUrl/")
+            val image = it.selectFirst("img.lazy")!!.attr("data-src").replaceFirst("//", "https://")
             val isSerie = href.contains("/serie/")
 
             if (isSerie) {
@@ -107,15 +107,14 @@ class CuevanaProvider : MainAPI() {
         val description = soup.selectFirst(".Description p")?.text()?.trim()
         val poster: String? = soup.selectFirst(".movtv-info div.Image img")!!.attr("data-src")
             .replace(Regex("\\/p\\/w\\d+.*\\/"),"/p/original/")
-        val backgrounposter = soup.selectFirst("html body.slider div#top-single.bd div.backdrop div.Image figure.Objf img.lazy")!!.attr("data-src")
-            .replace("\\/\\/", "/")
+        val backgrounposter = soup.selectFirst("img.lazy")!!.attr("data-src").replaceFirst("//", "https://")
         val year1 = soup.selectFirst("footer p.meta").toString()
         val yearRegex = Regex("<span>(\\d+)</span>")
         val yearf =
             yearRegex.find(year1)?.destructured?.component1()?.replace(Regex("<span>|</span>"), "")
         val year = if (yearf.isNullOrBlank()) null else yearf.toIntOrNull()
         val episodes = soup.select(".all-episodes li.TPostMv article").map { li ->
-            val href = li.select("a").attr("href")
+            val href = li.select("a").attr("href").replaceFirst("^/".toRegex(), "$mainUrl/")
             val epThumb =
                 li.selectFirst("div.Image img")?.attr("data-src") ?: li.selectFirst("img.lazy")!!
                     .attr("data-srcc").replace(Regex("\\/w\\d+\\/"),"/w780/")
@@ -193,100 +192,10 @@ class CuevanaProvider : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        app.get(data).document.select("div.TPlayer.embed_div iframe").apmap {
-            val iframe = fixUrl(it.attr("data-src"))
-            if (iframe.contains(Regex("cuevana.*fembed"))) {
-                val femkey = iframe.substringAfter("?h=")
-                val femrequest = app.post("https://api.cuevana3.me/fembed/api.php", allowRedirects = false,
-                    headers = mapOf(
-                        "User-Agent" to USER_AGENT,
-                        "Accept" to "application/json, text/javascript, */*; q=0.01",
-                        "Accept-Language" to "en-US,en;q=0.5",
-                        "Content-Type" to "application/x-www-form-urlencoded; charset=UTF-8",
-                        "X-Requested-With" to "XMLHttpRequest",
-                        "DNT" to "1",
-                        "Connection" to "keep-alive",
-                        "Sec-Fetch-Dest" to "empty",
-                        "Sec-Fetch-Mode" to "cors",
-                        "Sec-Fetch-Site" to "same-origin"),
-                    data = mapOf("h" to femkey)
-                ).parsedSafe<Femcuevana>()
-                if (femrequest != null) {
-                    loadExtractor(femrequest.url, data, subtitleCallback, callback)
-                }
-            }
-            if (iframe.contains(Regex("tomato.*goto_ddh.php"))) {
-                val tomatokey = iframe.substringAfter("goto_ddh.php?h=")
-                val linkpost = app.post("https://apialfa.tomatomatela.club/ir/redirect_ddh.php",
-                    allowRedirects = false,
-                    data = mapOf(
-                        "url" to tomatokey
-                    ),
-                    headers = mapOf(
-                        "User-Agent" to USER_AGENT,
-                        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                        "Accept-Language" to "en-US,en;q=0.5",
-                        "Content-Type" to "application/x-www-form-urlencoded",
-                        "DNT" to "1",
-                        "Connection" to "keep-alive",
-                        "Upgrade-Insecure-Requests" to "1",
-                        "Sec-Fetch-Dest" to "iframe",
-                        "Sec-Fetch-Mode" to "navigate",
-                        "Sec-Fetch-Site" to "same-origin",
-                        "TE" to "trailers",
-                    )
-                ).headers["location"]
-                if (linkpost != null){
-                    loadExtractor(linkpost, data, subtitleCallback, callback)
-                }
-
-            }
-
-            if (iframe.contains(Regex("tomato.*player.php"))) {
-                //They put a different servers here
-                val serverskey = iframe.substringAfter("player.php?h=")
-                val requestservers = app.post("https://apialfa.tomatomatela.club/ir/rd.php", allowRedirects = false,
-                    data = mapOf("url" to serverskey),
-                    headers = mapOf(
-                        "User-Agent" to USER_AGENT,
-                        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                        "Accept-Language" to "en-US,en;q=0.5",
-                        "Content-Type" to "application/x-www-form-urlencoded",
-                        "DNT" to "1",
-                        "Connection" to "keep-alive",
-                        "Upgrade-Insecure-Requests" to "1",
-                        "Sec-Fetch-Dest" to "iframe",
-                        "Sec-Fetch-Mode" to "navigate",
-                        "Sec-Fetch-Site" to "same-origin",
-                        "TE" to "trailers")
-                ).headers["location"]
-                if (requestservers != null){
-                    val aa = requestservers.replace("https://sbembed.com","https://watchsb.com")
-                    loadExtractor(aa, data, subtitleCallback, callback)
-                }
-            }
-            if (iframe.contains(Regex("tomato.*index.php"))) {
-                //More servers
-                val anotherkey = iframe.substringAfter("index.php?h=")
-                val anotherrequest = app.post("https://apialfa.tomatomatela.club/sc/r.php", allowRedirects = false,
-                    data = mapOf("h" to anotherkey),
-                    headers = mapOf(
-                        "User-Agent" to USER_AGENT,
-                        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                        "Accept-Language" to "en-US,en;q=0.5",
-                        "Content-Type" to "application/x-www-form-urlencoded",
-                        "DNT" to "1",
-                        "Connection" to "keep-alive",
-                        "Upgrade-Insecure-Requests" to "1",
-                        "Sec-Fetch-Dest" to "iframe",
-                        "Sec-Fetch-Mode" to "navigate",
-                        "Sec-Fetch-Site" to "same-origin",
-                        "Sec-Fetch-User" to "?1",
-                        "TE" to "trailers")
-                ).headers["location"]
-                if (anotherrequest != null){
-                    loadExtractor(anotherrequest, data, subtitleCallback, callback)
-                }
+        app.get(data).document.select("li.open_submenu").map {
+            it.select("li.clili").map {
+                val iframe = fixUrl(it.attr("data-video").replaceFirst("^//".toRegex(), "https://"))
+                loadExtractor(iframe, mainUrl, subtitleCallback, callback)
             }
         }
         return true
