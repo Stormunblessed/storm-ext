@@ -6,7 +6,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
 
 class CinecalidadProvider : MainAPI() {
-    override var mainUrl = "https://cinecalidad.lol"
+    override var mainUrl = "https://www.cinecalidad.ec"
     override var name = "Cinecalidad"
     override var lang = "es"
     override val hasMainPage = true
@@ -52,10 +52,10 @@ class CinecalidadProvider : MainAPI() {
         val url = "$mainUrl/?s=${query}"
         val document = app.get(url).document
 
-        return document.select("article").map {
+        return document.select("article.item").map {
             val title = it.selectFirst("div.in_title")!!.text()
             val href = it.selectFirst("a")!!.attr("href")
-            val image = it.selectFirst(".poster.custom img")!!.attr("data-src")
+            val image = it.selectFirst("img.lazy")!!.attr("data-src")
             val isMovie = href.contains("/ver-pelicula/")
 
             if (isMovie) {

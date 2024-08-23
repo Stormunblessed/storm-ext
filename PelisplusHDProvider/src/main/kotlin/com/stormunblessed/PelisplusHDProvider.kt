@@ -9,7 +9,7 @@ import com.lagradost.cloudstream3.utils.loadExtractor
 import org.jsoup.nodes.Element
 
 class PelisplusHDProvider:MainAPI() {
-    override var mainUrl = "https://ww1.pelisplushd.nu"
+    override var mainUrl = "https://pelisplushd.bz"
     override var name = "PelisplusHD"
     override var lang = "es"
     override val hasMainPage = true
