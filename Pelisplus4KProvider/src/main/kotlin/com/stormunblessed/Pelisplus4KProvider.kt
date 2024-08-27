@@ -15,13 +15,17 @@ class Pelisplus4KProvider :MainAPI() {
     override val supportedTypes = setOf(
         TvType.Movie,
         TvType.TvSeries,
+        TvType.AsianDrama,
+        TvType.Anime,
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse? {
         val items = ArrayList<HomePageList>()
         val urls = listOf(
             Pair("Peliculas", "$mainUrl/peliculas"),
-            Pair("Series", "$mainUrl/series")
+            Pair("Series", "$mainUrl/series"),
+            Pair("Doramas", "$mainUrl/doramas"),
+            Pair("Animes", "$mainUrl/animes"),
         )
 
         urls.apmap { (name, url) ->
@@ -77,30 +81,27 @@ class Pelisplus4KProvider :MainAPI() {
         val tags = doc.select("div.home__slider .genres:contains(Generos) a").map { it.text() }
         val epi = ArrayList<Episode>()
         if (tvType == TvType.TvSeries) {
-            var jsonscript = ""
-            doc.select("script[type=text/javascript]").mapNotNull {script ->
-                val ssRegex = Regex("(?i)seasons")
-                val ss =  if (script.data().contains(ssRegex)) script.data() else ""
-                val swaa = ss.substringAfter("seasonsJson = ").substringBefore(";")
-                jsonscript = swaa
-            }
-            val json = parseJson<MainTemporada>(jsonscript)
-            json.values.map { list ->
-                list.map { info ->
-                    val epTitle = info.title
-                    val seasonNum = info.season
-                    val epNum = info.episode
-                    val img = info.image
-                    val realimg = if (img == null) null else if (img.isEmpty() == true) null else "https://image.tmdb.org/t/p/w342${img.replace("\\/", "/")}"
-                    val epurl = "$url/season/$seasonNum/episode/$epNum"
-                    epi.add(
-                        Episode(
-                            epurl,
-                            epTitle,
-                            seasonNum,
-                            epNum,
-                            realimg,
-                        ))
+            val script = doc.select("script").firstOrNull { it.html().contains("seasonsJson = ") }?.html()
+            if(!script.isNullOrEmpty()){
+                val jsonscript = script.substringAfter("seasonsJson = ").substringBefore(";")
+                val json = parseJson<MainTemporada>(jsonscript)
+                json.values.map { list ->
+                    list.map { info ->
+                        val epTitle = info.title
+                        val seasonNum = info.season
+                        val epNum = info.episode
+                        val img = info.image
+                        val realimg = if (img == null) null else if (img.isEmpty() == true) null else "https://image.tmdb.org/t/p/w342${img.replace("\\/", "/")}"
+                        val epurl = "$url/season/$seasonNum/episode/$epNum"
+                        epi.add(
+                            Episode(
+                                epurl,
+                                epTitle,
+                                seasonNum,
+                                epNum,
+                                realimg,
+                            ))
+                    }
                 }
             }
         }
