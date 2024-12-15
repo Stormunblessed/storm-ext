@@ -1,12 +1,11 @@
 package com.lagradost.cloudstream3.movieproviders
 
-import android.webkit.URLUtil
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.getQualityFromName
 import com.lagradost.cloudstream3.utils.loadExtractor
-import com.lagradost.cloudstream3.utils.loadExtractor
+import org.json.JSONObject
 import org.jsoup.nodes.Element
+import com.lagradost.cloudstream3.extractors.helper.CryptoJS
 
 class PelisplusHDProvider:MainAPI() {
     override var mainUrl = "https://pelisplushd.bz"
@@ -43,6 +42,7 @@ class PelisplusHDProvider:MainAPI() {
         val href = this.select("a").attr("href")
         val posterUrl = fixUrl(this.select(".Posters-img").attr("src"))
         val isMovie = href.contains("/pelicula/")
+        val isAnime = href.contains("/anime/")
         return if (isMovie) {
             MovieSearchResponse(
                 title,
@@ -52,12 +52,12 @@ class PelisplusHDProvider:MainAPI() {
                 posterUrl,
                 null
             )
-        } else {
+        }else {
             TvSeriesSearchResponse(
                 title,
                 href,
                 name,
-                TvType.Movie,
+                TvType.TvSeries,
                 posterUrl,
                 null,
                 null
@@ -167,66 +167,38 @@ class PelisplusHDProvider:MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        app.get(data).document.select("div.player").map { script ->
-            fetchUrls(
-                script.data()
-                    .replace("https://api.mycdn.moe/furl.php?id=", "https://www.fembed.com/v/")
-                    .replace("https://api.mycdn.moe/sblink.php?id=", "https://streamsb.net/e/")
-            )
-                .apmap { link ->
-                    val regex = """(go_to_player|go_to_playerVast)\('(.*?)'""".toRegex()
-                    regex.findAll(app.get(link).document.html()).toList().apmap {
-                        val current = it?.groupValues?.get(2) ?: ""
-                        var link: String? = null
-                        if (URLUtil.isValidUrl(current)) {
-                            link = fixUrl(current)
-                        } else {
-                            try {
-                                link =
-                                    base64Decode(
-                                        it?.groupValues?.get(1) ?: ""
-                                    )
-                            } catch (e: Throwable) {
-                            }
-                        }
+        app.get(data).document.select("div.player").map{script ->
+            fetchUrls(script.data()).apmap { link ->
+                val doc = app.get(link).document
+                val isNewEmbed = doc.select(".ODDIV div").isEmpty()
 
-                        if (!link.isNullOrBlank()) {
-                            if (link.contains("https://api.mycdn.moe/video/") || link.contains(
-                                    "https://api.mycdn.moe/embed.php?customid"
-                                )
-                            ) {
-                                val doc = app.get(link).document
-                                doc.select("div.ODDIV li").apmap {
-                                    val linkencoded = it.attr("data-r")
-                                    val linkdecoded = base64Decode(linkencoded)
-                                        .replace(
-                                            Regex("https://owodeuwu.xyz|https://sypl.xyz"),
-                                            "https://embedsito.com"
-                                        )
-                                        .replace(Regex(".poster.*"), "")
-                                    val secondlink =
-                                        it.attr("onclick").substringAfter("go_to_player('")
-                                            .substringBefore("',")
-                                    loadExtractor(linkdecoded, link, subtitleCallback, callback)
-                                    val restwo = app.get(
-                                        "https://api.mycdn.moe/player/?id=$secondlink",
-                                        allowRedirects = false
-                                    ).document
-                                    val thirdlink = restwo.selectFirst("body > iframe")?.attr("src")
-                                        ?.replace(
-                                            Regex("https://owodeuwu.xyz|https://sypl.xyz"),
-                                            "https://embedsito.com"
-                                        )
-                                        ?.replace(Regex(".poster.*"), "")
-                                    loadExtractor(thirdlink!!, link, subtitleCallback, callback)
+                if(!isNewEmbed){
+                    doc.select(".ODDIV div li").apmap {
+                        val linkExtracted = it.attr("onclick").substringAfter("go_to_playerVast('")
+                            .substringBefore("',")
+                        loadExtractor(linkExtracted, subtitleCallback,callback)
+                    }
+                }else{
+                    val scriptData = doc.select("script").lastOrNull().toString()
+                    val regexKey = """CryptoJS\.AES\.decrypt\(.*?,\s*['"](.+?)['"]\)""".toRegex()
+                    val aesKey = regexKey.find(scriptData)!!.value.substringAfter("CryptoJS.AES.decrypt(encryptedLink, '")
+                        .substringBefore("')")
+                    val jsonRegex = """const dataLink = (\[.*?\]);""".toRegex(RegexOption.DOT_MATCHES_ALL)
+                    val jsonExtracted = jsonRegex.find(scriptData)!!.groupValues[1]
+                    val dataLink = JSONObject("{\"dataLink\": $jsonExtracted}").getJSONArray("dataLink")
 
-                                }
-                            } else {
-                                loadExtractor(link, data, subtitleCallback, callback)
-                            }
+                    for (i in 0 until dataLink.length()){
+                        val sortedEmbeds = dataLink.getJSONObject(i).getJSONArray("sortedEmbeds")
+
+                        for (j in 0 until sortedEmbeds.length()){
+                            val linkExtracted = sortedEmbeds.getJSONObject(j).getString("link")
+                            val linkDecrypted = CryptoJS.decrypt(aesKey, linkExtracted)
+                            loadExtractor(linkDecrypted, subtitleCallback, callback)
                         }
                     }
+
                 }
+            }
         }
         return true
     }
