@@ -57,7 +57,7 @@ class PelisplusHDProvider:MainAPI() {
                 title,
                 href,
                 name,
-                TvType.Movie,
+                TvType.TvSeries,
                 posterUrl,
                 null,
                 null
@@ -74,14 +74,13 @@ class PelisplusHDProvider:MainAPI() {
             val href = it.selectFirst("a")!!.attr("href")
             val image = it.selectFirst(".Posters-img")?.attr("src")?.let { it1 -> fixUrl(it1) }
             val isMovie = href.contains("/pelicula/")
-            val isAnime = href.contains("/anime/")
 
             if (isMovie) {
                 MovieSearchResponse(
                     title,
                     href,
                     this.name,
-                    TvType.Anime,
+                    TvType.Movie,
                     image,
                     null
                 )
