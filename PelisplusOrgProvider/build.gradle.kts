@@ -1,5 +1,5 @@
 // use an integer for version numbers
-version = 2
+version = 1
 
 
 cloudstream {
@@ -7,7 +7,7 @@ cloudstream {
     // All of these properties are optional, you can safely remove them
 
     //description = "Lorem Ipsum"
-    authors = listOf("misajimenezmx")
+    authors = listOf("redblacker8")
 
     /**
      * Status int as the following:
@@ -20,9 +20,7 @@ cloudstream {
     tvTypes = listOf(
         "Movie",
         "TvSeries",
-        "Anime",
-        "Cartoon",
     )
 
-    iconUrl = "https://sololatino.net/wp-content/uploads/2020/10/cropped-logo-final-192x192.png"
+    iconUrl = "https://pelis-plus.icu/assets/img/ic/favicon-96x96.png"
 }

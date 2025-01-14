@@ -1,10 +1,16 @@
 package com.stormunblessed
 
+import android.util.Base64
 import android.util.Log
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
+import java.security.MessageDigest
+import java.util.Arrays
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 
 class SoloLatinoProvider : MainAPI() {
     override var mainUrl = "https://sololatino.net"
@@ -145,11 +151,93 @@ class SoloLatinoProvider : MainAPI() {
     ): Boolean {
         val regex = """(go_to_player|go_to_playerVast)\('(.*?)'""".toRegex()
         app.get(data).document.selectFirst("iframe")?.attr("src")?.let { frameUrl ->
-            regex.findAll(app.get(frameUrl).document.html()).map { it.groupValues.get(2) }.toList().apmap {
-                loadExtractor(it, data, subtitleCallback, callback)
+            if (frameUrl.startsWith("https://embed69.org/")) {
+                val linkRegex = """"link":"(.*?)"""".toRegex()
+                val links = app.get(frameUrl).document.select("script")
+                    .firstOrNull { it.html().contains("const dataLink = [") }?.html()
+                    ?.substringAfter("const dataLink = ")
+                    ?.substringBefore(";")?.let {
+                        linkRegex.findAll(it).map { it.groupValues[1] }.map {
+                            decryptCryptoJsAES(
+                                it,
+                                "Ak7qrvvH4WKYxV2OgaeHAEg2a5eh16vE"
+                            )
+                        }
+                    }?.toList();
+                links?.apmap {
+                    loadExtractor(it!!, data, subtitleCallback, callback)
+                }
+            } else {
+                regex.findAll(app.get(frameUrl).document.html()).map { it.groupValues.get(2) }
+                    .toList().apmap {
+                        loadExtractor(it, data, subtitleCallback, callback)
+                    }
             }
         }
         return true
+    }
+
+    fun generateKeyAndIV(
+        keyLength: Int,
+        ivLength: Int,
+        iterations: Int,
+        salt: ByteArray,
+        password: ByteArray,
+        md: MessageDigest
+    ): Array<ByteArray> {
+        val digestLength = md.digestLength
+        val requiredLength = (keyLength + ivLength + digestLength - 1) / digestLength * digestLength
+        val generatedData = ByteArray(requiredLength)
+        var generatedLength = 0
+
+        try {
+            md.reset()
+
+            while (generatedLength < keyLength + ivLength) {
+                if (generatedLength > 0)
+                    md.update(generatedData, generatedLength - digestLength, digestLength)
+                md.update(password)
+                if (salt != null)
+                    md.update(salt, 0, 8)
+                md.digest(generatedData, generatedLength, digestLength)
+
+                for (i in 1 until iterations) {
+                    md.update(generatedData, generatedLength, digestLength)
+                    md.digest(generatedData, generatedLength, digestLength)
+                }
+
+                generatedLength += digestLength
+            }
+
+            val result = Array(2) { ByteArray(0) }
+            result[0] = Arrays.copyOfRange(generatedData, 0, keyLength)
+            if (ivLength > 0)
+                result[1] = Arrays.copyOfRange(generatedData, keyLength, keyLength + ivLength)
+
+            return result
+        } catch (e: Exception) {
+            throw RuntimeException(e)
+        } finally {
+            Arrays.fill(generatedData, 0.toByte())
+        }
+    }
+
+    fun decryptCryptoJsAES(encryptedData: String, key: String): String {
+        val cipherData = Base64.decode(encryptedData, Base64.DEFAULT)
+        val saltData = Arrays.copyOfRange(cipherData, 8, 16)
+
+        val md5 = MessageDigest.getInstance("MD5")
+        val keyAndIV = generateKeyAndIV(32, 16, 1, saltData, key.toByteArray(Charsets.UTF_8), md5)
+        val secretKey = SecretKeySpec(keyAndIV[0], "AES")
+        val iv = IvParameterSpec(keyAndIV[1])
+
+        val encrypted = Arrays.copyOfRange(cipherData, 16, cipherData.size)
+        val aesCBC = Cipher.getInstance("AES/CBC/PKCS5Padding")
+        aesCBC.init(Cipher.DECRYPT_MODE, secretKey, iv)
+        val decryptedData = aesCBC.doFinal(encrypted)
+        val decryptedText = String(decryptedData, Charsets.UTF_8)
+
+        return decryptedText
     }
 
 }

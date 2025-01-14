@@ -9,7 +9,7 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
 
 class CuevanaProvider : MainAPI() {
-    override var mainUrl = "https://cuevana3.ch"
+    override var mainUrl = "https://cuevana.biz"
     override var name = "Cuevana"
     override var lang = "es"
     override val hasMainPage = true
@@ -20,42 +20,25 @@ class CuevanaProvider : MainAPI() {
         TvType.TvSeries,
     )
 
-    override suspend fun getMainPage(page: Int, request : MainPageRequest): HomePageResponse {
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
         val items = ArrayList<HomePageList>()
         val urls = listOf(
-            Pair("$mainUrl/peliculas", "Recientemente actualizadas"),
-            Pair("$mainUrl/estrenos", "Estrenos"),
-        )
-        items.add(
-            HomePageList(
-                "Series",
-                app.get("$mainUrl/serie", timeout = 120).document.select("section.home-series li")
-                    .map {
-                        val title = it.selectFirst("h2.Title")!!.text()
-                        val poster = it.selectFirst("img.lazy")!!.attr("data-src").replaceFirst("//", "https://")
-                        val url = it.selectFirst("a")!!.attr("href")
-                        TvSeriesSearchResponse(
-                            title,
-                            url,
-                            this.name,
-                            TvType.Anime,
-                            poster,
-                            null,
-                            null,
-                        )
-                    })
+            Pair("$mainUrl/peliculas", "Peliculas actualizadas"),
+            Pair("$mainUrl/peliculas/estrenos", "Peliculas Estrenos"),
+            Pair("$mainUrl/series", "Series actualizadas"),
+            Pair("$mainUrl/series/estrenos", "Series Estrenos"),
         )
         urls.apmap { (url, name) ->
             val soup = app.get(url).document
-            val home = soup.select("section li.xxx.TPostMv").map {
-                val title = it.selectFirst("h2.Title")!!.text()
-                val link = it.selectFirst("a")!!.attr("href")
+            val home = soup.select("section li.TPostMv").map {
+                val title = it.selectFirst("span.Title")!!.text()
+                val link = it.selectFirst("a")!!.attr("href").replaceFirst("/", "$mainUrl/")
                 TvSeriesSearchResponse(
                     title,
                     link,
                     this.name,
                     if (link.contains("/pelicula/")) TvType.Movie else TvType.TvSeries,
-                    it.selectFirst("img.lazy")!!.attr("data-src").replaceFirst("//", "https://"),
+                    it.selectFirst("img")!!.attr("src").replaceFirst("/", "$mainUrl/"),
                     null,
                     null,
                 )
@@ -69,13 +52,13 @@ class CuevanaProvider : MainAPI() {
     }
 
     override suspend fun search(query: String): List<SearchResponse> {
-        val url = "$mainUrl/search.html?keyword=${query}"
+        val url = "$mainUrl/search?q=${query}"
         val document = app.get(url).document
 
-        return document.select("li.xxx.TPostMv").map {
-            val title = it.selectFirst("h2.Title")!!.text()
+        return document.select("li.TPostMv").map {
+            val title = it.selectFirst("span.Title")!!.text()
             val href = it.selectFirst("a")!!.attr("href").replaceFirst("/", "$mainUrl/")
-            val image = it.selectFirst("img.lazy")!!.attr("data-src").replaceFirst("//", "https://")
+            val image = it.selectFirst("img")!!.attr("src").replaceFirst("/", "$mainUrl/")
             val isSerie = href.contains("/serie/")
 
             if (isSerie) {
@@ -101,39 +84,89 @@ class CuevanaProvider : MainAPI() {
         }
     }
 
+    data class SeriesResponse(
+        val props: Props?
+    )
+
+    data class Props(
+        val pageProps: PageProps
+    )
+
+    data class PageProps(
+        val thisSerie: Series
+    )
+
+    data class Series(
+        val seasons: List<Season>,
+        val titles: Titles
+    )
+
+    data class Season(
+        val number: Int,
+        val episodes: List<Episode>
+    )
+
+    data class Episode(
+        val title: String,
+        val TMDbId: String,
+        val number: Int,
+        val releaseDate: String,
+        val image: String,
+        val url: Url
+    )
+
+    data class Titles(
+        val name: String,
+        val original: OriginalTitle
+    )
+
+    data class OriginalTitle(
+        val name: String
+    )
+
+    data class Url(
+        val slug: String
+    )
+
+    fun parseSeriesData(jsonString: String): SeriesResponse? {
+        try {
+            return parseJson<SeriesResponse>(jsonString)
+        } catch (error: Exception) {
+            return null;
+        }
+    }
+
     override suspend fun load(url: String): LoadResponse? {
         val soup = app.get(url, timeout = 120).document
         val title = soup.selectFirst("h1.Title")!!.text()
         val description = soup.selectFirst(".Description p")?.text()?.trim()
-        val poster: String? = soup.selectFirst(".movtv-info div.Image img")!!.attr("data-src")
-            .replace(Regex("\\/p\\/w\\d+.*\\/"),"/p/original/")
-        val backgrounposter = soup.selectFirst("img.lazy")!!.attr("data-src").replaceFirst("//", "https://")
+        val poster: String? = soup.selectFirst("div.backdrop article.TPost div.Image img")!!.attr("src")
+            .replaceFirst("/", "$mainUrl/")
+        val backgrounposter =
+            soup.selectFirst("div.Image:nth-child(2) img")!!.attr("src").replaceFirst("/", "$mainUrl/")
         val year1 = soup.selectFirst("footer p.meta").toString()
         val yearRegex = Regex("<span>(\\d+)</span>")
         val yearf =
             yearRegex.find(year1)?.destructured?.component1()?.replace(Regex("<span>|</span>"), "")
         val year = if (yearf.isNullOrBlank()) null else yearf.toIntOrNull()
-        val episodes = soup.select(".all-episodes li.TPostMv article").map { li ->
-            val href = li.select("a").attr("href").replaceFirst("^/".toRegex(), "$mainUrl/")
-            val epThumb =
-                li.selectFirst("div.Image img")?.attr("data-src") ?: li.selectFirst("img.lazy")!!
-                    .attr("data-srcc").replace(Regex("\\/w\\d+\\/"),"/w780/")
-            val seasonid = li.selectFirst("span.Year")!!.text().let { str ->
-                str.split("x").mapNotNull { subStr -> subStr.toIntOrNull() }
+        val episodes = soup.select("script#__NEXT_DATA__").firstOrNull().let {
+            parseSeriesData(it!!.html())?.props?.pageProps?.thisSerie?.seasons?.flatMap { season ->
+                season.episodes.apmap {
+                    Episode(
+                        it.url.slug
+                            .replace("series/", "$mainUrl/serie/")
+                            .replace("seasons/", "temporada/")
+                            .replace("episodes/", "episodio/"),
+                        it.title,
+                        season.number,
+                        it.number,
+                        it.image
+                    )
+                }
             }
-            val isValid = seasonid.size == 2
-            val episode = if (isValid) seasonid.getOrNull(1) else null
-            val season = if (isValid) seasonid.getOrNull(0) else null
-            Episode(
-                href,
-                null,
-                season,
-                episode,
-                fixUrl(epThumb)
-            )
-        }
+        }.orEmpty()
         val tags = soup.select("ul.InfoList li.AAIco-adjust:contains(Genero) a").map { it.text() }
-        val tvType = if (episodes.isEmpty()) TvType.Movie else TvType.TvSeries
+        val tvType = if (episodes == null || episodes.isEmpty()) TvType.Movie else TvType.TvSeries
         val recelement =
             if (tvType == TvType.TvSeries) "main section div.series_listado.series div.xxx"
             else "main section ul.MovieList li"
@@ -151,13 +184,16 @@ class CuevanaProvider : MainAPI() {
                     year = null
                 )
             }
-        val trailer = soup.selectFirst("div.TPlayer.embed_div div[id=OptY] iframe")?.attr("data-src") ?: ""
+        val trailer =
+            soup.selectFirst("div.TPlayer.embed_div div[id=OptY] iframe")?.attr("data-src") ?: ""
 
 
         return when (tvType) {
             TvType.TvSeries -> {
-                newTvSeriesLoadResponse(title,
-                    url, tvType, episodes,){
+                newTvSeriesLoadResponse(
+                    title,
+                    url, tvType, episodes,
+                ) {
                     this.posterUrl = poster
                     this.backgroundPosterUrl = backgrounposter
                     this.plot = description
@@ -166,8 +202,9 @@ class CuevanaProvider : MainAPI() {
                     this.recommendations = recommendations
                 }
             }
+
             TvType.Movie -> {
-                newMovieLoadResponse(title, url, tvType, url){
+                newMovieLoadResponse(title, url, tvType, url) {
                     this.posterUrl = poster
                     this.plot = description
                     this.backgroundPosterUrl = backgrounposter
@@ -178,6 +215,7 @@ class CuevanaProvider : MainAPI() {
                 }
 
             }
+
             else -> null
         }
     }
@@ -193,9 +231,13 @@ class CuevanaProvider : MainAPI() {
         callback: (ExtractorLink) -> Unit
     ): Boolean {
         app.get(data).document.select("li.open_submenu").map {
-            it.select("li.clili").map {
-                val iframe = fixUrl(it.attr("data-video").replaceFirst("^//".toRegex(), "https://"))
-                loadExtractor(iframe, mainUrl, subtitleCallback, callback)
+            it.select("li.clili").apmap {
+                val iframe = fixUrl(it.attr("data-tr"))
+                app.get(iframe).document.select("script")
+                    .firstOrNull { it.html().contains("var url = '") }?.html()
+                    ?.substringAfter("var url = '")?.substringBefore("';")?.let {
+                        loadExtractor(it, mainUrl, subtitleCallback, callback)
+                    }
             }
         }
         return true

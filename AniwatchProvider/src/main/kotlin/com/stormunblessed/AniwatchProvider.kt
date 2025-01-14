@@ -1,5 +1,6 @@
 package com.stormunblessed
 
+import android.annotation.SuppressLint
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.LoadResponse.Companion.addAniListId
@@ -174,6 +175,7 @@ class AniwatchProvider : MainAPI() {
         @JsonProperty("anilist_id") val aniListId: String?,
     )
 
+    @SuppressLint("SuspiciousIndentation")
     override suspend fun load(url: String): LoadResponse {
         val html = app.get(url).text
         val document = Jsoup.parse(html)

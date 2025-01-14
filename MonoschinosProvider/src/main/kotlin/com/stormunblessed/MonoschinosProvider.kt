@@ -127,7 +127,7 @@ class MonoschinosProvider : MainAPI() {
     override suspend fun load(url: String): LoadResponse {
         getToken(url)
         val doc = app.get(url, timeout = 120).document
-        val caplist = doc.selectFirst(".caplist").attr("data-ajax")
+        val caplist = doc.selectFirst(".caplist")!!.attr("data-ajax")
         val poster = doc.selectFirst("img.w-100")!!.attr("data-src")
         val backimage = doc.selectFirst("img.rounded-3")!!.attr("data-src")
         val title = doc.selectFirst(".fs-2")!!.text()
