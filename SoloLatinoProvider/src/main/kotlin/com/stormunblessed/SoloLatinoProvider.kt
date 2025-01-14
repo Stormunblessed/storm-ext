@@ -1,10 +1,17 @@
 package com.stormunblessed
 
+import android.util.Base64
 import android.util.Log
 import com.lagradost.cloudstream3.*
+import com.lagradost.cloudstream3.extractors.helper.CryptoJS
 import com.lagradost.cloudstream3.network.CloudflareKiller
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.loadExtractor
+import java.security.MessageDigest
+import java.util.Arrays
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 
 class SoloLatinoProvider : MainAPI() {
     override var mainUrl = "https://sololatino.net"
@@ -145,11 +152,26 @@ class SoloLatinoProvider : MainAPI() {
     ): Boolean {
         val regex = """(go_to_player|go_to_playerVast)\('(.*?)'""".toRegex()
         app.get(data).document.selectFirst("iframe")?.attr("src")?.let { frameUrl ->
-            regex.findAll(app.get(frameUrl).document.html()).map { it.groupValues.get(2) }.toList().apmap {
-                loadExtractor(it, data, subtitleCallback, callback)
+            if (frameUrl.startsWith("https://embed69.org/")) {
+                val linkRegex = """"link":"(.*?)"""".toRegex()
+                val links = app.get(frameUrl).document.select("script")
+                    .firstOrNull { it.html().contains("const dataLink = [") }?.html()
+                    ?.substringAfter("const dataLink = ")
+                    ?.substringBefore(";")?.let {
+                        linkRegex.findAll(it).map { it.groupValues[1] }.map {
+                            CryptoJS.decrypt("Ak7qrvvH4WKYxV2OgaeHAEg2a5eh16vE", it)
+                        }
+                    }?.toList();
+                links?.apmap {
+                    loadExtractor(it!!, data, subtitleCallback, callback)
+                }
+            } else {
+                regex.findAll(app.get(frameUrl).document.html()).map { it.groupValues.get(2) }
+                    .toList().apmap {
+                        loadExtractor(it, data, subtitleCallback, callback)
+                    }
             }
         }
         return true
     }
-
 }
